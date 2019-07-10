@@ -1,5 +1,4 @@
 #IMPORT LIBARARIES
-from __future__ import math
 import random
 import numpy
 #Note: I am looking at R^2 with OLS but any technique with a metric for success will work
@@ -13,9 +12,9 @@ X = []
 Y = [[],[],[],[],[]]
 f = open('training.csv', 'r')
 line = f.readline()
+line = f.readline()
+data = line.split(',')
 while(len(line) > 2):
-    line = f.readline()
-    data = line.split(',')
     x = []
     for l in range(1, 3594):
         x.append(float(data[l]))
@@ -26,6 +25,9 @@ while(len(line) > 2):
     X.append(x)
     for l in range(0, 5):
         Y[l].append(float(data[3595+l]))
+    line = f.readline()
+    data = line.split(',')
+
 
 
 YY = Y
@@ -37,15 +39,15 @@ n2use = 30
 #what's an acceptable difference of the above
 plus_or_minus = 0
 #How many children to create in the algorithm?
-generation_size = 2000
+generation_size = 200
 #How many generations would you like to run?
-num_generations = 100
+num_generations = 10
 
 
 #This runs on auto.
 n_cols = len(X[0])
 indiv_odds = n_cols*[float(n2use)/n_cols]
-best_quantity = int(n_cols/n2use/2)
+best_quantity = int(n_cols**0.5)
 best = []
 
 
@@ -65,10 +67,10 @@ def scoreModel():
 
 #This happens in between generations. It's how we choose the next columns for the next generation
 def reshape():
-    for c3 in range(0,n_cols):
+    for c3 in range(n_cols):
         n = 0.
-        for c4 in range(0, len(best)):
-            if ((best[c4][1] & (2**c3)) == (2**c3)):
+        for c4 in range(len(best)):
+            if best[c4][1][c3] == '1':
                 n = n + 1/(1-best[c4][0])
         indiv_odds[c3] = n
     total = 0
@@ -83,11 +85,10 @@ def reshape():
 def save(elem):
     if (len(best)<best_quantity):
         best.append(elem)
-    else:
-        e = getEdge('bottom')
-        if (e[0]<elem[0]):
-            best.remove(e)
-            best.append(elem)
+    elif elem[0] > best[-1][0]:
+        best.sort(reverse=True)
+        best.pop()
+        best.append(elem)
 
 
 #Find the top or bottom of the "Hall of Fame"
@@ -109,14 +110,13 @@ def getEdge(b):
 
 
 #Reshape your dataset in order to put it the way it's needed for your model, based on the child's code
-def assembleMatrix():
-    result = str(bin(string))[3:]
+def assembleMatrix(string):
     XX = []
-    for c3 in X:
+    for row in X:
         xx = [1]
-        for c4 in range(0,len(result)):
-            if (result[c4] == '1'):
-                xx.append(c3[c4])
+        for col in range(0,len(string)):
+            if (string[col] == '1'):
+                xx.append(row[col])
         XX.append(xx)
     return XX
 
@@ -125,38 +125,42 @@ def assembleMatrix():
 #it is implemeted directly in the executive part of the code
 #Suppose you have 100 columns of data, this number correponds with 1s and 0s to whether or not a columns is included
 def spawnChild():
-    for c2 in range(0,n_cols):
-        string = string << 1
-        if (random.random() < indiv_odds[c2]):
-            n = n + 1
-            string = string + 1
-    return string
-
+    try:
+        temp_odds = indiv_odds
+        indices = set()
+        for _ in range(n2use):
+            total_odds = sum(temp_odds)
+            chooser = random.random() * total_odds
+            so_far = 0
+            index = -1
+            while so_far < chooser and index < len(temp_odds):
+                index += 1
+                so_far += temp_odds[index]
+            temp_odds[index] = 0
+            indices.add(index)
+        string = ''
+        for _ in range(len(indiv_odds)):
+            if _ in indices:
+                string += '1'
+            else:
+                string += '0'
+        return string
+    except Exception as e:
+        print(e)
 
 
 initModel()
 #START
 for c0 in range(0,num_generations):
-    print str(c0) + ' - ' + str(datetime.datetime.now().strftime("%A, %d. %B %Y %I:%M%p"))
-    print str(getEdge('top')[0]) + ' ... ' + str(getEdge('bottom')[0])
+    print(str(c0) + ' - ' + str(datetime.datetime.now().strftime("%A, %d. %B %Y %I:%M%p")))
+    print(str(getEdge('top')[0]) + ' ... ' + str(getEdge('bottom')[0]))
     for c1 in range(0,generation_size):
-        #print 'generation: ' + str(c0) + ' - child: ' + str(c1)
-        n = 0
-        string = 0
-        for c2 in range(0,n_cols):
-            string = string << 1
-            if (random.random() < indiv_odds[c2]):
-                n = n + 1
-                string = string + 1
-        if ((n>=(n2use-plus_or_minus)) and (n<=(n2use+plus_or_minus))):
-            #assemble matrix
-            #print str(string)
-            XXX = assembleMatrix()
-            runModel()
-            score = scoreModel()
-            #check result against the best
-            save([score, string])
-            print str(score)
+        print('generation: ' + str(c0) + ' - child: ' + str(c1))
+        string = spawnChild()
+        XXX = assembleMatrix(string)
+        runModel()
+        score = scoreModel()
+        save([score, string])
     reshape()
     if (getEdge('top')[0] == getEdge('bottom')[0]):
         break
